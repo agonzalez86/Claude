@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role
+  createdAt DateTime @default(now())
+  lastLogin DateTime?
+
+  containersCreated      Container[]    @relation("CreatedBy")
+  containersAssigned     Container[]    @relation("AssignedBy")
+  clientsCreated         Client[]       @relation("CreatedBy")
+  activityLogs           ActivityLog[]
+  rentalRecordsAssigned  RentalRecord[] @relation("AssignedBy")
+  rentalRecordsConfirmed RentalRecord[] @relation("ConfirmedBy")
+  notes                  Note[]
+}
+
+enum Role {
+  ADMIN
+  SALES
+  WAREHOUSE_COORDINATOR
+}
+
+model Container {
+  id                 String        @id @default(uuid())
+  seriesNumber       String        @unique
+  internalCode       String        @unique
+  pedimentoNumber    String
+  purchaseDate       DateTime
+  costWithoutIVA     Decimal       @db.Decimal(10, 2)
+  currentLocation    Location
+  currentStatus      Status
+  assignedToId       String?
+  assignedTo         Client?       @relation(fields: [assignedToId], references: [id])
+  assignedById       String?
+  assignedBy         User?         @relation("AssignedBy", fields: [assignedById], references: [id])
+  assignedDate       DateTime?
+  operationType      OperationType?
+  monthlyRentalRate  Decimal?      @db.Decimal(10, 2)
+  rentalStartDate    DateTime?
+  expectedReturnDate DateTime?
+  facturaPdfUrl      String
+  pedimentoPdfUrl    String
+  salesInvoicePdfUrl String?
+  photoUrls          String[]
+  isArchived         Boolean       @default(false)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  createdById        String
+  createdBy          User          @relation("CreatedBy", fields: [createdById], references: [id])
+
+  rentalHistory RentalRecord[]
+  activityLogs  ActivityLog[]
+  notes         Note[]
+
+  @@index([currentStatus, currentLocation])
+  @@index([assignedToId])
+  @@index([isArchived])
+}
+
+enum Location {
+  SUPPLIER
+  MY_WAREHOUSE
+  IN_TRANSIT
+  CLIENT_LOCATION
+}
+
+enum Status {
+  FREE
+  ASSIGNED_SALE
+  ASSIGNED_RENTAL
+  PENDING_REVENUE_CONFIRMATION
+}
+
+enum OperationType {
+  SALE
+  RENTAL
+}
+
+model Client {
+  id                    String   @id @default(uuid())
+  name                  String
+  company               String
+  phone                 String
+  email                 String
+  address               String
+  latitude              Decimal? @db.Decimal(10, 8)
+  longitude             Decimal? @db.Decimal(11, 8)
+  createdFromInvoiceUrl String
+  createdAt             DateTime @default(now())
+  createdById           String
+  createdBy             User     @relation("CreatedBy", fields: [createdById], references: [id])
+
+  containers    Container[]
+  rentalRecords RentalRecord[]
+
+  @@index([name, company])
+}
+
+model RentalRecord {
+  id               String   @id @default(uuid())
+  containerId      String
+  container        Container @relation(fields: [containerId], references: [id], onDelete: Cascade)
+  clientId         String
+  client           Client   @relation(fields: [clientId], references: [id])
+  clientName       String
+  clientCompany    String
+  startDate        DateTime
+  endDate          DateTime
+  durationMonths   Int
+  monthlyRate      Decimal  @db.Decimal(10, 2)
+  finalRevenue     Decimal  @db.Decimal(10, 2)
+  assignedById     String
+  assignedBy       User     @relation("AssignedBy", fields: [assignedById], references: [id])
+  assignedByName   String
+  confirmedById    String
+  confirmedBy      User     @relation("ConfirmedBy", fields: [confirmedById], references: [id])
+  confirmedByName  String
+  confirmationDate DateTime
+  notes            String?
+  createdAt        DateTime @default(now())
+
+  @@index([containerId])
+  @@index([clientId])
+}
+
+model ActivityLog {
+  id          String   @id @default(uuid())
+  containerId String
+  container   Container @relation(fields: [containerId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  userName    String
+  userRole    Role
+  actionType  String
+  details     String   @db.Text
+  timestamp   DateTime @default(now())
+
+  @@index([containerId, timestamp])
+}
+
+model Note {
+  id          String   @id @default(uuid())
+  containerId String
+  container   Container @relation(fields: [containerId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  userName    String
+  content     String   @db.Text
+  timestamp   DateTime @default(now())
+
+  @@index([containerId, timestamp])
+}
+
+model SystemConfig {
+  id                       String   @id @default("singleton")
+  emailRecipients          String[]
+  supplierLocationName     String   @default("FLEX-BOX LIMITED")
+  supplierLocationAddress  String   @default("Hong Kong")
+  warehouseLocationName    String   @default("Mi Almacén")
+  warehouseLocationAddress String   @default("Querétaro, México")
+  updatedAt                DateTime @updatedAt
+}
